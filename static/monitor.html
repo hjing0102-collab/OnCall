@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>系统监控中心</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;background:#f5f7fa;color:#1a1a2e;min-height:100vh}
+.topbar{display:flex;align-items:center;gap:16px;padding:12px 24px;background:#fff;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:100}
+.topbar h1{font-size:18px;font-weight:700}
+.topbar .nav-links{display:flex;gap:8px;margin-left:auto}
+.topbar a{text-decoration:none;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;color:#6b7280;transition:all .15s}
+.topbar a:hover{background:#f0f2f5;color:#1a1a2e}
+.topbar a.active{background:#6366f1;color:#fff}
+.main{padding:20px 24px;max-width:1400px;margin:0 auto}
+.gauges{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px}
+.gauge{background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:20px;text-align:center}
+.gauge .g-title{font-size:12px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.gauge .g-val{font-size:36px;font-weight:700}
+.gauge .g-sub{font-size:12px;color:#9ca3af;margin-top:4px}
+.gauge .g-bar{height:6px;border-radius:3px;margin-top:12px;background:#e5e7eb;overflow:hidden}
+.gauge .g-bar-fill{height:100%;border-radius:3px;transition:width .5s}
+.g-bar-fill.normal{background:#10b981}
+.g-bar-fill.warning{background:#f59e0b}
+.g-bar-fill.danger{background:#ef4444}
+.section{background:#fff;border-radius:12px;border:1px solid #e5e7eb;margin-bottom:16px;overflow:hidden}
+.section .s-title{padding:14px 18px;font-size:14px;font-weight:600;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;justify-content:space-between}
+.section .s-badge{font-size:11px;padding:2px 10px;border-radius:10px;font-weight:500}
+.s-badge.ok{background:rgba(16,185,129,.12);color:#10b981}
+.s-badge.warn{background:rgba(245,158,11,.12);color:#f59e0b}
+.s-badge.bad{background:rgba(239,68,68,.12);color:#ef4444}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.grid-2>*{border-right:1px solid #f3f4f6}
+.grid-2>*:last-child{border-right:none}
+table{width:100%;border-collapse:collapse}
+th,td{padding:10px 14px;text-align:left;font-size:12px;border-bottom:1px solid #f9fafb}
+th{font-size:11px;color:#9ca3af;font-weight:600;background:#f9fafb}
+.proc-name{font-weight:500}
+.proc-pid{color:#9ca3af;font-size:11px}
+.ticket-row .sev{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+.sev-critical{background:rgba(239,68,68,.12);color:#ef4444}
+.sev-warning{background:rgba(245,158,11,.12);color:#f59e0b}
+.sev-minor{background:rgba(99,102,241,.12);color:#6366f1}
+.ticket-detail{font-size:11px;color:#6b7280;margin-top:4px;padding:4px 8px;background:#f9fafb;border-radius:4px;border-left:2px solid #6366f1}
+.svc-status{display:flex;flex-wrap:wrap;gap:6px;padding:14px 18px}
+.svc-tag{display:flex;align-items:center;gap:6px;padding:6px 14px;border:1px solid #e5e7eb;border-radius:20px;font-size:12px}
+.svc-dot{width:7px;height:7px;border-radius:50%}
+.svc-dot.running{background:#10b981}
+.svc-dot.warning{background:#f59e0b}
+.svc-dot.stopped{background:#ef4444}
+.auto-refresh{font-size:12px;color:#9ca3af;display:flex;align-items:center;gap:6px}
+.auto-refresh input{margin:0}
+.cpu-cores{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap}
+.cpu-core{height:20px;border-radius:3px;transition:all .3s;min-width:12px;flex:1;background:#e5e7eb}
+</style>
+</head>
+<body>
+<div class="topbar">
+<h1>系统监控中心</h1>
+<div class="nav-links">
+<a href="http://localhost:9900">返回助手</a>
+<a href="http://localhost:8003">日志查询</a>
+<a href="http://localhost:8004" class="active">系统监控</a>
+</div>
+</div>
+<div class="main">
+
+<div class="gauges">
+<div class="gauge">
+<div class="g-title">CPU 使用率</div>
+<div class="g-val" id="cpuVal">--</div><div class="g-sub">%</div>
+<div class="g-bar"><div class="g-bar-fill" id="cpuBar" style="width:0%"></div></div>
+<div class="cpu-cores" id="cpuCores"></div>
+</div>
+<div class="gauge">
+<div class="g-title">内存</div>
+<div class="g-val" id="memVal">--</div><div class="g-sub" id="memSub">%</div>
+<div class="g-bar"><div class="g-bar-fill" id="memBar" style="width:0%"></div></div>
+</div>
+<div class="gauge">
+<div class="g-title">进程数 / 网络</div>
+<div class="g-val" id="procVal">--</div><div class="g-sub">进程 · <span id="netInfo">--</span></div>
+</div>
+<div class="gauge">
+<div class="g-title">开机时长</div>
+<div class="g-val" id="uptimeVal">--</div><div class="g-sub">小时</div>
+</div>
+</div>
+
+<div class="section">
+<div class="s-title"><span>磁盘分区详情</span></div>
+<div id="diskList" style="padding:14px 18px;font-size:12px"></div>
+</div>
+
+<div class="section">
+<div class="s-title"><span>服务列表</span><div class="auto-refresh"><input type="checkbox" id="autoRefresh" checked>10秒自动刷新</div></div>
+<div class="svc-status" id="svcTags"></div>
+</div>
+
+<div class="grid-2">
+<div class="section">
+<div class="s-title"><span>CPU 占用 TOP10</span></div>
+<table><thead><tr><th>进程</th><th>PID</th><th>CPU%</th><th>内存</th></tr></thead><tbody id="cpuProcBody"></tbody></table>
+</div>
+<div class="section">
+<div class="s-title"><span>内存占用 TOP10</span></div>
+<table><thead><tr><th>进程</th><th>PID</th><th>内存</th><th>占比</th></tr></thead><tbody id="memProcBody"></tbody></table>
+</div>
+</div>
+
+<div class="section">
+<div class="s-title"><span>历史工单</span><span class="s-badge ok" id="ticketBadge">--</span></div>
+<table><thead><tr><th style="width:110px">ID</th><th>详情</th><th style="width:60px">级别</th><th style="width:80px">状态</th></tr></thead><tbody id="ticketBody"></tbody></table>
+</div>
+
+</div>
+<script>
+const MON_API='http://localhost:8004/api/monitor';
+let autoTimer=null;
+
+function statusClass(v,danger,warn){
+    if(v>=danger)return'danger';if(v>=warn)return'warning';return'normal';
+}
+
+async function refreshAll(){
+    try{
+        const[cpuR,memR,procR,svcR,memTopR,diskR,netR]=await Promise.all([
+            fetch(`${MON_API}/cpu`),fetch(`${MON_API}/memory`),
+            fetch(`${MON_API}/processes?limit=10`),fetch(`${MON_API}/services`),
+            fetch(`${MON_API}/memory-top?limit=10`),fetch(`${MON_API}/disk`),
+            fetch(`${MON_API}/network`)
+        ]);
+        const cpu=await cpuR.json();const mem=await memR.json();
+        const proc=await procR.json();const svc=await svcR.json();
+        const memTop=await memTopR.json();const disk=await diskR.json();
+        const net=await netR.json();
+
+        // CPU gauge
+        const cpuV=cpu.data.usage_percent;
+        document.getElementById('cpuVal').textContent=cpuV;
+        const cpuBar=document.getElementById('cpuBar');
+        cpuBar.style.width=cpuV+'%';cpuBar.className='g-bar-fill '+statusClass(cpuV,90,70);
+
+        let cores='';
+        (cpu.data.per_core||[]).forEach((c,i)=>{
+            cores+=`<div class="cpu-core" style="background:${c>80?'#ef4444':c>50?'#f59e0b':'#10b981'};opacity:${0.3+c/130}"></div>`;
+        });
+        document.getElementById('cpuCores').innerHTML=cores;
+
+        // Memory gauge
+        const memV=mem.data.usage_percent;
+        document.getElementById('memVal').textContent=memV;
+        document.getElementById('memSub').textContent=mem.data.used_gb+'G / '+mem.data.total_gb+'G';
+        const memBar=document.getElementById('memBar');
+        memBar.style.width=memV+'%';memBar.className='g-bar-fill '+statusClass(memV,95,80);
+
+        // Process count + network
+        document.getElementById('procVal').textContent=proc.data.total;
+        document.getElementById('netInfo').textContent='↑'+net.data.bytes_sent_mb+'MB ↓'+net.data.bytes_recv_mb+'MB';
+
+        // Uptime
+        document.getElementById('uptimeVal').textContent=net.data.uptime_hours;
+
+        // CPU top processes
+        document.getElementById('cpuProcBody').innerHTML=(proc.data.top_cpu||[]).map(p=>
+            `<tr><td class="proc-name">${p.name}</td><td class="proc-pid">${p.pid}</td><td>${p.cpu_percent}%</td><td>${p.memory_mb}MB</td></tr>`
+        ).join('')||'<tr><td colspan="4">--</td></tr>';
+
+        // Memory TOP10
+        document.getElementById('memProcBody').innerHTML=(memTop.data.top||[]).map(p=>
+            `<tr><td class="proc-name">${p.name}</td><td class="proc-pid">${p.pid}</td><td>${p.memory_mb}MB</td><td>${p.memory_pct}%</td></tr>`
+        ).join('')||'<tr><td colspan="4">--</td></tr>';
+
+        // Disk partitions
+        document.getElementById('diskList').innerHTML=(disk.data.partitions||[]).map(p=>{
+            const barW=p.percent;
+            const barC=p.status==='danger'?'#ef4444':p.status==='warning'?'#f59e0b':'#10b981';
+            return `<div style="margin-bottom:8px">
+<div style="display:flex;justify-content:space-between;margin-bottom:2px">
+<span>${p.mountpoint} (${p.device})</span><span style="color:${barC};font-weight:600">${p.used_gb}G/${p.total_gb}G</span>
+</div>
+<div style="height:4px;border-radius:2px;background:#e5e7eb;overflow:hidden">
+<div style="height:100%;width:${barW}%;background:${barC};border-radius:2px"></div>
+</div></div>`;
+        }).join('');
+
+        // Services
+        document.getElementById('svcRunning').textContent=svc.data.running;
+        document.getElementById('svcTotal').textContent=svc.data.total;
+        document.getElementById('svcTags').innerHTML=(svc.data.services||[]).map(s=>
+            `<span class="svc-tag"><span class="svc-dot ${s.status}"></span>${s.name}<span style="color:#9ca3af;font-size:11px">:${s.port}</span></span>`
+        ).join('');
+
+    }catch(e){console.error('Core fetch error:',e)}
+    // Tickets load independently so one failure doesn't block the rest
+    loadTickets();
+}
+
+async function loadTickets(){
+    try{
+        const r=await fetch(`${MON_API}/tickets`);
+        const d=await r.json();
+        const tickets=d.data.tickets;
+        const openTickets=tickets.filter(t=>t.status!=='resolved').length;
+        const badge=document.getElementById('ticketBadge');
+        badge.textContent=openTickets+' 待处理';
+        badge.className='s-badge '+(openTickets>2?'bad':(openTickets>0?'warn':'ok'));
+        document.getElementById('ticketBody').innerHTML=tickets.map(t=>{
+            const statusText={resolved:'已解决',open:'处理中',investigating:'调查中'}[t.status]||t.status;
+            const sevText={critical:'严重',warning:'警告',minor:'轻微'}[t.severity]||t.severity;
+            const detail=t.resolution?`<div class="ticket-detail">解决方案: ${t.resolution}</div>`:'';
+            return `<tr>
+<td style="font-family:monospace;font-size:11px">${t.id}</td>
+<td>
+<div style="font-weight:500">${t.title}</div>
+<div style="font-size:11px;color:#9ca3af">${t.service}</div>
+${detail}
+</td>
+<td><span class="sev sev-${t.severity}">${sevText}</span></td>
+<td>${statusText}${t.resolved_at?'<div style="font-size:10px;color:#9ca3af">'+t.resolved_at+'</div>':''}</td>
+</tr>`;
+        }).join('');
+    }catch(e){console.error('Tickets error:',e)}
+}
+
+document.getElementById('autoRefresh').addEventListener('change',function(){
+    if(this.checked){autoTimer=setInterval(refreshAll,10000);}else{clearInterval(autoTimer);}
+});
+
+refreshAll();
+autoTimer=setInterval(refreshAll,10000);
+</script>
+</body>
+</html>

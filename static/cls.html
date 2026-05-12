@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CLS 日志查询</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;background:#f5f7fa;color:#1a1a2e;min-height:100vh}
+.topbar{display:flex;align-items:center;gap:16px;padding:12px 24px;background:#fff;border-bottom:1px solid #e5e7eb;position:sticky;top:0;z-index:100}
+.topbar h1{font-size:18px;font-weight:700}
+.topbar .nav-links{display:flex;gap:8px;margin-left:auto}
+.topbar a{text-decoration:none;padding:6px 14px;border-radius:20px;font-size:13px;font-weight:500;color:#6b7280;transition:all .15s}
+.topbar a:hover{background:#f0f2f5;color:#1a1a2e}
+.topbar a.active{background:#6366f1;color:#fff}
+.main{padding:20px 24px;max-width:1400px;margin:0 auto}
+.toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:16px;padding:16px;background:#fff;border-radius:12px;border:1px solid #e5e7eb}
+.toolbar select,.toolbar input,.toolbar button{padding:8px 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:inherit}
+.toolbar select{background:#fff}
+.toolbar input{flex:1;min-width:200px}
+.toolbar button{background:#6366f1;color:#fff;border:none;cursor:pointer;font-weight:500;transition:all .15s}
+.toolbar button:hover{background:#4f46e5}
+.stats-bar{display:flex;gap:12px;margin-bottom:16px}
+.stat-card{flex:1;padding:14px 18px;background:#fff;border-radius:10px;border:1px solid #e5e7eb;text-align:center}
+.stat-card .val{font-size:26px;font-weight:700;color:#6366f1}
+.stat-card .lbl{font-size:11px;color:#9ca3af;margin-top:2px}
+.patterns{margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap}
+.pattern-tag{padding:6px 12px;border-radius:16px;font-size:12px;font-weight:500}
+.pattern-tag.danger{background:rgba(239,68,68,.12);color:#b91c1c}
+.pattern-tag.warning{background:rgba(245,158,11,.12);color:#b45309}
+.pattern-tag.info{background:rgba(16,185,129,.12);color:#047857}
+.log-table{width:100%;background:#fff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden}
+.log-table thead{background:#f9fafb}
+.log-table th{padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px}
+.log-table td{padding:10px 14px;font-size:12px;border-top:1px solid #f3f4f6;vertical-align:top}
+.log-table .lvl{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:600}
+.lvl-ERROR{background:rgba(239,68,68,.12);color:#ef4444}
+.lvl-WARNING{background:rgba(245,158,11,.12);color:#f59e0b}
+.lvl-INFO{background:rgba(16,185,129,.12);color:#10b981}
+.lvl-DEBUG{background:rgba(99,102,241,.12);color:#6366f1}
+.log-msg{max-width:700px;word-break:break-all;font-family:'JetBrains Mono','Fira Code',monospace;font-size:11px;line-height:1.5}
+.top-modules{margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap}
+.module-tag{display:flex;align-items:center;gap:6px;padding:4px 10px;background:#fff;border:1px solid #e5e7eb;border-radius:16px;font-size:11px}
+.module-tag .cnt{background:#6366f1;color:#fff;padding:1px 6px;border-radius:8px;font-size:10px}
+.empty{text-align:center;padding:40px;color:#9ca3af}
+.auto-refresh{display:flex;align-items:center;gap:8px;font-size:12px;color:#9ca3af}
+.auto-refresh input{margin:0}
+</style>
+</head>
+<body>
+<div class="topbar">
+<h1>CLS 日志查询</h1>
+<div class="nav-links">
+<a href="http://localhost:9900">返回助手</a>
+<a href="http://localhost:8003" class="active">日志查询</a>
+<a href="http://localhost:8004">系统监控</a>
+</div>
+</div>
+<div class="main">
+<div class="toolbar">
+<select id="topicSelect">
+<option value="">全部主题</option>
+<option value="api-access">API 访问日志</option>
+<option value="system">系统日志</option>
+<option value="error">错误日志</option>
+<option value="performance">性能日志</option>
+<option value="security">安全审计日志</option>
+</select>
+<select id="levelSelect">
+<option value="">全部级别</option>
+<option value="ERROR">ERROR</option>
+<option value="WARNING">WARNING</option>
+<option value="INFO">INFO</option>
+<option value="DEBUG">DEBUG</option>
+</select>
+<input type="text" id="queryInput" placeholder="搜索关键词...">
+<select id="limitSelect">
+<option value="50">50条</option>
+<option value="100">100条</option>
+<option value="200">200条</option>
+<option value="0" selected>全部</option>
+</select>
+<button id="searchBtn">搜索日志</button>
+<button id="analyzeBtn" style="background:#10b981" title="统计日志级别的分布、错误率、模块TOP排行、异常模式">模式分析</button>
+<label class="auto-refresh"><input type="checkbox" id="autoRefresh" checked>10秒自动刷新</label>
+</div>
+<div class="stats-bar">
+<div class="stat-card"><div class="val" id="totalLogs">--</div><div class="lbl">匹配条数</div></div>
+<div class="stat-card"><div class="val" id="totalInStore">--</div><div class="lbl">存储总量</div></div>
+<div class="stat-card"><div class="val" id="errorRate">--</div><div class="lbl">错误率</div></div>
+<div class="stat-card"><div class="val" id="topicCount">--</div><div class="lbl">活跃主题</div></div>
+</div>
+<div class="patterns" id="patternTags"></div>
+<div class="top-modules" id="topModules"></div>
+<div id="resultInfo" style="font-size:12px;color:#9ca3af;margin-bottom:8px;display:none"></div>
+<div class="log-table">
+<table>
+<thead><tr><th style="width:150px">时间</th><th style="width:70px">级别</th><th>日志内容</th></tr></thead>
+<tbody id="logBody"><tr><td colspan="3" class="empty">选择主题后点击"搜索日志"，或点击"模式分析"查看统计</td></tr></tbody>
+</table>
+</div>
+</div>
+<script>
+const CLS_API = 'http://localhost:8003/api/cls';
+let autoTimer = null;
+
+async function loadTopics(){
+    const r=await fetch(`${CLS_API}/topics`);
+    const d=await r.json();
+    const topics=d.data.topics;
+    document.getElementById('topicCount').textContent=topics.length;
+    // 累加所有主题的日志总量
+    const total=topics.reduce((sum,t)=>sum+t.log_count,0);
+    document.getElementById('totalInStore').textContent=total;
+}
+
+async function searchLogs(){
+    const topic=document.getElementById('topicSelect').value;
+    const level=document.getElementById('levelSelect').value;
+    const query=document.getElementById('queryInput').value;
+    const limit=document.getElementById('limitSelect').value;
+    // 空 topic = 搜索全部主题, limit=0 = 全部
+    const r=await fetch(`${CLS_API}/search?topic=${topic}&level=${level}&query=${encodeURIComponent(query)}&limit=${limit}`);
+    const d=await r.json();
+    const logs=d.data.logs;
+    renderLogs(logs);
+    document.getElementById('totalLogs').textContent=d.data.total;
+    document.getElementById('resultInfo').style.display='block';
+    document.getElementById('resultInfo').textContent=`显示 ${logs.length} 条，共匹配 ${d.data.total} 条 · 主题: ${d.data.topic} · 级别: ${d.data.level||'全部'}${d.data.query?' · 关键词: '+d.data.query:''}`;
+    // Also update storage total
+    loadTopics();
+}
+
+async function analyzePatterns(){
+    const topic=document.getElementById('topicSelect').value;
+    const r=await fetch(`${CLS_API}/analyze?topic=${topic}`);
+    const d=await r.json();
+    const data=d.data;
+    document.getElementById('totalInStore').textContent=data.total_lines;
+    document.getElementById('errorRate').textContent=data.error_rate+'%';
+    document.getElementById('topicCount').textContent=(data.top_sources||[]).length;
+    document.getElementById('totalLogs').textContent='-';
+
+    // 异常模式标签
+    let pt='';
+    data.patterns.forEach(p=>pt+=`<span class="pattern-tag ${p.severity}">${p.pattern}: ${p.detail}</span>`);
+    document.getElementById('patternTags').innerHTML=pt;
+
+    // TOP 来源模块
+    let tm='';
+    (data.top_sources||[]).forEach(m=>tm+=`<span class="module-tag">${m.source}<span class="cnt">${m.count}</span></span>`);
+    document.getElementById('topModules').innerHTML=tm;
+
+    // 同时显示最近的日志样本
+    const rs=await fetch(`${CLS_API}/search?topic=${topic}&limit=20`);
+    const ds=await rs.json();
+    renderLogs(ds.data.logs);
+    document.getElementById('totalLogs').textContent=ds.data.total;
+}
+
+function renderLogs(logs){
+    const tbody=document.getElementById('logBody');
+    if(!logs||logs.length===0){tbody.innerHTML='<tr><td colspan="3" class="empty">未找到匹配日志</td></tr>';return;}
+    tbody.innerHTML=logs.map(l=>`<tr>
+<td style="white-space:nowrap">${l.timestamp||'-'}</td>
+<td><span class="lvl lvl-${l.level}">${l.level}</span></td>
+<td><div class="log-msg">${escapeHtml(l.message)}</div></td>
+</tr>`).join('');
+}
+
+function escapeHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+
+function refreshAll(){analyzePatterns();}
+
+document.getElementById('searchBtn').addEventListener('click',searchLogs);
+document.getElementById('analyzeBtn').addEventListener('click',analyzePatterns);
+document.getElementById('autoRefresh').addEventListener('change',function(){
+    if(this.checked){autoTimer=setInterval(refreshAll,10000);}else{clearInterval(autoTimer);}
+});
+
+loadTopics();
+analyzePatterns();
+autoTimer=setInterval(refreshAll,10000);
+</script>
+</body>
+</html>
